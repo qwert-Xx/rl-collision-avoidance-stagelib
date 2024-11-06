@@ -3,8 +3,8 @@ CXX = g++
 CXXFLAGS = -Iinclude -lstage
 
 # 定义源文件和目标文件
-SRC = main.cpp
-OBJ = build/main.o
+SRC = main.cpp stgCPPToPy.cpp
+OBJ = build/main.o build/stgCPPToPy.o
 TARGET = build/main
 
 # 默认目标
