@@ -4,6 +4,9 @@
 
 
 namespace StgCPPToPy{
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool ready = true;
     std::vector<WorldNode*> worlds; //世界列表
 
     int Init(uint8_t num_world){
@@ -110,17 +113,51 @@ namespace StgCPPToPy{
         return this->position->TokenStr();
     }
 
-    int callback(Stg::World *world, void* user){
+    int callback(Stg::World *world, void* user){//世界更新回调函数
+        static bool worldUpdatedone = false;
         WorldNode* node = (WorldNode*)user;
         // std::cout << "Callback from world:" << static_cast<int>(node->GetId()) << std::endl;
         // std::cout << "Time:" << world->SimTimeNow() << std::endl;
-        //遍历每一个机器人
-        for (Robot* robot : node->GetRobots()){
-            
+
+
+        //这里进行各种处理
+
+        
+
+
+
+        
+        if(node->GetId() == worlds.size() - 1){
+            //处理完了最后一个世界后唤醒pycall
+            std::unique_lock<std::mutex> lck(mtx);
+            ready = false;
+            cv.notify_all();
+            lck.unlock();
+
+            //唤醒pycall之后等待pycall执行完毕
+            lck.lock();
+            cv.wait(lck, []{return ready;});
+            lck.unlock();
         }
         return 0;
-
     }
 
+    void pycall(void){
+        //python调用这个函数，用于更新和获取数据
+        //每次遍历完所有的world之后，需要调用pycall之后才能继续下一次循环
+        while(1){
+            std::unique_lock<std::mutex> lck(mtx);
+            cv.wait(lck, []{return !ready;});
+            ready = true;
+
+            //在这里进行处理
+
+
+
+            cv.notify_all();//处理完了之后再唤醒
+            lck.unlock();
+            // std::this_thread::sleep_for(std::chrono::seconds(3)); // 阻塞3秒
+        }
+    }
 }
 

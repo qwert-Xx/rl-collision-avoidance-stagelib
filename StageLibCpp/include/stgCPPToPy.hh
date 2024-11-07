@@ -1,7 +1,15 @@
 #include <iostream>
 #include <Stage-4.3/stage.hh>
 #include <deque>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 namespace StgCPPToPy {
+    extern std::mutex mtx;
+    extern std::condition_variable cv;
+    extern bool ready;
+
     const std::string stageFileStr = "stage1.world";
     int Init(uint8_t num_world);
 
@@ -87,6 +95,7 @@ namespace StgCPPToPy {
 
     extern std::vector<WorldNode*> worlds; //世界列表
     int callback(Stg::World *world, void* user);
+    void pycall(void);
 
 }
 
