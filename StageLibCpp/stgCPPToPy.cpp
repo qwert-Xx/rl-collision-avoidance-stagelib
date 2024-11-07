@@ -6,7 +6,7 @@
 namespace StgCPPToPy{
     std::mutex mtx;
     std::condition_variable cv;
-    bool ready = true;
+    bool ready = true;//默认先执行一次
     std::vector<WorldNode*> worlds; //世界列表
     std::thread* mainThread; //主线程
 
@@ -110,6 +110,7 @@ namespace StgCPPToPy{
     void Robot::ResetPosition(void){
         Stg::ModelPosition* position = this->position;
         position->SetPose(this->initialPose);
+        this->rangesData.clear();
         return;
     }
 
@@ -132,15 +133,18 @@ namespace StgCPPToPy{
         
         if(node->GetId() == worlds.size() - 1){
             //处理完了最后一个世界后唤醒pycall
+            //通知pycall获取数据
             std::unique_lock<std::mutex> lck(mtx);
             ready = false;
             cv.notify_all();
             lck.unlock();
 
             //唤醒pycall之后等待pycall执行完毕
+            //等待pycall的下次调用
             lck.lock();
             cv.wait(lck, []{return ready;});
             lck.unlock();
+            //唤醒后执行动作
         }
         return 0;
     }
@@ -148,11 +152,51 @@ namespace StgCPPToPy{
     std::vector<WorldData> pycall(std::vector<RobotCmd> robotCmds){
         //python调用这个函数，用于更新和获取数据
         //每次遍历完所有的world之后，需要调用pycall之后才能继续下一次循环
+
+        //首先执行动作，然后唤醒主线程，之后再等待主线程唤醒，然后返回数据
+
+        //查看主线程是否已经执行完毕,若执行完毕则ready会变成false
         std::unique_lock<std::mutex> lck(mtx);
         cv.wait(lck, []{return !ready;});
-        ready = true;
+        //此时ready为false，主线程已经执行完毕
 
-        //在这里进行处理
+        //遍历每个世界
+        for (std::size_t i = 0; i < worlds.size(); i++){
+            WorldNode* world = worlds[i];
+            RobotCmd cmd = robotCmds[i];
+            //遍历每个机器人
+            std::vector<Robot*> robots = world->GetRobots();
+            for (std::size_t j = 0; j < robots.size(); j++){
+                Robot* robot = robots[j];
+                //处理每个机器人
+                if(cmd.robotId[j] != robot->GetId()){
+                    std::cout << "Error: Robot id not match!" << std::endl;
+                    //抛出异常
+                    throw "Error: Robot id not match!";
+                }
+                Stg::Velocity newVelocity;
+                newVelocity.x = cmd.vx[j];
+                newVelocity.y = cmd.vy[j];
+                newVelocity.a = cmd.vtheta[j];
+                robot->SetSpeedData(newVelocity);
+                if(cmd.reset[j]){
+                    robot->ResetPosition();
+                }
+            }
+        }
+        //唤醒主线程，然后等待主线程唤醒
+
+        ready = true;
+        cv.notify_all();
+        lck.unlock();
+        
+        //沉睡等待主线程唤醒
+        
+        lck.lock();
+        cv.wait(lck, []{return !ready;});
+        lck.unlock();
+
+        //被主线程唤醒后，获取数据并返回
         std::vector<WorldData> worldsData;
         //遍历每个世界
         for (std::size_t i = 0; i < worlds.size(); i++){
@@ -184,30 +228,12 @@ namespace StgCPPToPy{
                 singalWorldData.laserData.push_back(ranges);
                 singalWorldData.robotId.push_back(robot->GetId());
                 singalWorldData.name.push_back(robot->GetName());
-                //处理cmd
-                if(cmd.robotId[j] != robot->GetId()){
-                    std::cout << "Error: Robot id not match!" << std::endl;
-                    //抛出异常
-                    throw "Error: Robot id not match!";
-                }
-                Stg::Velocity newVelocity;
-                newVelocity.x = cmd.vx[j];
-                newVelocity.y = cmd.vy[j];
-                newVelocity.a = cmd.vtheta[j];
-                robot->SetSpeedData(newVelocity);
-                if(cmd.reset[j]){
-                    robot->ResetPosition();
-                }
             }
             worldsData.push_back(singalWorldData);
-        }    
+        }
 
-
-
-        cv.notify_all();//处理完了之后再唤醒
-        lck.unlock();
-        // std::this_thread::sleep_for(std::chrono::seconds(3)); // 阻塞3秒
         return worldsData;
+        
     }
 }
 
