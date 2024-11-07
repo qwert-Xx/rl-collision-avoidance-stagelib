@@ -1,7 +1,11 @@
 #include <stgCPPToPy.hh>
 
 
-
+double normalizeAngle(double angle) {
+    while (angle > M_PI) angle -= 2 * M_PI;
+    while (angle < -M_PI) angle += 2 * M_PI;
+    return angle;
+}
 
 namespace StgCPPToPy{
     std::mutex mtx;
@@ -78,7 +82,20 @@ namespace StgCPPToPy{
 
     Stg::Velocity Robot::GetSpeedData(){
         Stg::ModelPosition* position = this->position;
-        Stg::Velocity velocity = position->GetGlobalVelocity();
+        Stg::Pose pose = position->GetGlobalPose();
+        Stg::Velocity velocity;
+        Stg::usec_t dt = this->world->sim_interval;
+        //根据两次之间的时间，位置和角度来计算线速度和角速度
+        double line_speed = sqrt(pow(pose.x - this->lastPose.x,2) + pow(pose.y - this->lastPose.y,2)) / ((double)(dt) / 1e6);
+        double angle_speed = normalizeAngle(pose.a - this->lastPose.a) / ((double)(dt) / 1e6);
+        this->lastPose = pose;
+        
+        velocity.x = line_speed;
+        velocity.y = 0;
+        velocity.a = angle_speed;
+        velocity.z = 0;
+
+        
         return velocity;
     }
 

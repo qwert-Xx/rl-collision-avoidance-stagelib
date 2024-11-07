@@ -56,6 +56,7 @@ namespace StgCPPToPy {
             Stg::Pose initialPose;
             std::deque<std::vector<Stg::meters_t>> rangesData; //历史的激光雷达数据
             uint8_t id;
+            Stg::Pose lastPose;
     };
 
     class WorldNode{
