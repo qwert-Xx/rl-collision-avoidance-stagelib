@@ -89,7 +89,7 @@ namespace StgCPPToPy{
         double line_speed = sqrt(pow(pose.x - this->lastPose.x,2) + pow(pose.y - this->lastPose.y,2)) / ((double)(dt) / 1e6);
         double angle_speed = normalizeAngle(pose.a - this->lastPose.a) / ((double)(dt) / 1e6);
         this->lastPose = pose;
-        
+
         velocity.x = line_speed;
         velocity.y = 0;
         velocity.a = angle_speed;
@@ -245,6 +245,7 @@ namespace StgCPPToPy{
                 singalWorldData.laserData.push_back(ranges);
                 singalWorldData.robotId.push_back(robot->GetId());
                 singalWorldData.name.push_back(robot->GetName());
+                singalWorldData.isStalled.push_back(robot->GetIsStalled());
             }
             worldsData.push_back(singalWorldData);
         }

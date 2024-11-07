@@ -49,6 +49,9 @@ namespace StgCPPToPy {
             uint8_t GetId(void){
                 return this->id;
             }
+            bool GetIsStalled(void){
+                return this->position->Stalled();
+            }
         private:
             Stg::World* world;
             Stg::ModelPosition* position;
@@ -111,6 +114,7 @@ namespace StgCPPToPy {
         std::vector<double> vy;//速度y
         std::vector<double> vtheta;//角速度
         std::vector<std::deque<std::vector<Stg::meters_t>>> laserData;//激光雷达数据
+        std::vector<bool> isStalled;//是否被卡住
     };
     
     struct RobotCmd{//每个机器人的速度指令
@@ -146,7 +150,9 @@ namespace StgCPPToPy {
             .def_readwrite("vx",&WorldData::vx , "速度x")
             .def_readwrite("vy",&WorldData::vy , "速度y")
             .def_readwrite("vtheta",&WorldData::vtheta , "角速度")
-            .def_readwrite("laserData",&WorldData::laserData , "激光雷达数据");
+            .def_readwrite("laserData",&WorldData::laserData , "激光雷达数据")
+            .def_readwrite("isStalled",&WorldData::isStalled , "是否被卡住");
+            
         m.def("Start",&Start);
         m.def("pycall",&pycall);
     }
