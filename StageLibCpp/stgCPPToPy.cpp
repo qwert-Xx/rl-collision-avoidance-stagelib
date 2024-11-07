@@ -142,22 +142,69 @@ namespace StgCPPToPy{
         return 0;
     }
 
-    void pycall(void){
+    std::vector<WorldData> pycall(std::vector<RobotCmd> robotCmds){
         //python调用这个函数，用于更新和获取数据
         //每次遍历完所有的world之后，需要调用pycall之后才能继续下一次循环
-        while(1){
-            std::unique_lock<std::mutex> lck(mtx);
-            cv.wait(lck, []{return !ready;});
-            ready = true;
+        std::unique_lock<std::mutex> lck(mtx);
+        cv.wait(lck, []{return !ready;});
+        ready = true;
 
-            //在这里进行处理
+        //在这里进行处理
+        std::vector<WorldData> worldsData;
+        //遍历每个世界
+        for (int i = 0; i < worlds.size(); i++){
+            WorldNode* world = worlds[i];
+            WorldData singalWorldData;
+            RobotCmd cmd = robotCmds[i];
+            singalWorldData.id = world->GetId();
+            if(cmd.id != world->GetId()){
+                std::cout << "Error: World id not match!" << std::endl;
+                //抛出异常
+                throw "Error: World id not match!";
+            }
+            //遍历每个机器人
+            
+            std::vector<Robot*> robots = world->GetRobots();
+            for (int j = 0; j < robots.size(); j++){
+                Robot* robot = robots[j];
+                //处理每个机器人
+                Stg::Pose pose = robot->GetPositionData();
+                Stg::Velocity velocity = robot->GetSpeedData();
+                std::deque<std::vector<Stg::meters_t>> ranges = robot->GetLaserData();
+                
+                singalWorldData.x.push_back(pose.x);
+                singalWorldData.y.push_back(pose.y);
+                singalWorldData.theta.push_back(pose.a);
+                singalWorldData.vx.push_back(velocity.x);
+                singalWorldData.vy.push_back(velocity.y);
+                singalWorldData.vtheta.push_back(velocity.a);
+                singalWorldData.laserData.push_back(ranges);
+                singalWorldData.robotId.push_back(robot->GetId());
+                singalWorldData.name.push_back(robot->GetName());
+                //处理cmd
+                if(cmd.robotId[j] != robot->GetId()){
+                    std::cout << "Error: Robot id not match!" << std::endl;
+                    //抛出异常
+                    throw "Error: Robot id not match!";
+                }
+                Stg::Velocity newVelocity;
+                newVelocity.x = cmd.vx[j];
+                newVelocity.y = cmd.vy[j];
+                newVelocity.a = cmd.vtheta[j];
+                robot->SetSpeedData(newVelocity);
+                if(cmd.reset[j]){
+                    robot->ResetPosition();
+                }
+            }
+            worldsData.push_back(singalWorldData);
+        }    
 
 
 
-            cv.notify_all();//处理完了之后再唤醒
-            lck.unlock();
-            // std::this_thread::sleep_for(std::chrono::seconds(3)); // 阻塞3秒
-        }
+        cv.notify_all();//处理完了之后再唤醒
+        lck.unlock();
+        // std::this_thread::sleep_for(std::chrono::seconds(3)); // 阻塞3秒
+        return worldsData;
     }
 }
 

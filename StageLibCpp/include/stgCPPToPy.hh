@@ -93,9 +93,32 @@ namespace StgCPPToPy {
             uint8_t id;
     };
 
+    //pycall返回值类型，包含每个世界每个机器人的位置、速度、激光雷达数据
+    struct WorldData{ //由机器人数据组成的向量,每个元素代表一个机器人，
+        uint8_t id;
+        std::vector<std::string> name;//机器人名字
+        std::vector<uint8_t> robotId;//机器人id 
+        std::vector<double> x;//位置x
+        std::vector<double> y;//位置y
+        std::vector<double> theta;//角度
+        std::vector<double> vx;//速度x
+        std::vector<double> vy;//速度y
+        std::vector<double> vtheta;//角速度
+        std::vector<std::deque<std::vector<Stg::meters_t>>> laserData;//激光雷达数据
+    };
+    
+    struct RobotCmd{//每个机器人的速度指令
+        uint8_t id;//世界id
+        std::vector<uint8_t> robotId;//机器人id
+        std::vector<double> vx;//速度x
+        std::vector<double> vy;//速度y
+        std::vector<double> vtheta;//角速度
+        std::vector<bool> reset;//是否重置位置
+    };
+
     extern std::vector<WorldNode*> worlds; //世界列表
     int callback(Stg::World *world, void* user);
-    void pycall(void);
+    std::vector<WorldData> pycall(std::vector<RobotCmd>);
 
 }
 
