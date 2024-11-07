@@ -5,12 +5,17 @@
 #include <mutex>
 #include <condition_variable>
 #include <chrono>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+namespace py = pybind11;
 namespace StgCPPToPy {
     extern std::mutex mtx;
     extern std::condition_variable cv;
     extern bool ready;
+    extern std::thread* mainThread;
 
     const std::string stageFileStr = "stage1.world";
+    void Start(uint8_t num_world);//在这个函数中开启新线程调用Init
     int Init(uint8_t num_world);
 
     class Robot{
@@ -120,6 +125,30 @@ namespace StgCPPToPy {
     int callback(Stg::World *world, void* user);
     std::vector<WorldData> pycall(std::vector<RobotCmd>);
 
+    PYBIND11_MODULE(stgCPPToPy,m){
+        py::class_<RobotCmd>(m,"RobotCmd")
+            .def(py::init<>())
+            .def_readwrite("id",&RobotCmd::id , "世界id")
+            .def_readwrite("robotId",&RobotCmd::robotId , "机器人id")
+            .def_readwrite("vx",&RobotCmd::vx , "速度x")
+            .def_readwrite("vy",&RobotCmd::vy , "速度y")
+            .def_readwrite("vtheta",&RobotCmd::vtheta , "角速度")
+            .def_readwrite("reset",&RobotCmd::reset , "是否重置位置");
+        py::class_<WorldData>(m,"WorldData")
+            .def(py::init<>())
+            .def_readwrite("id",&WorldData::id , "世界id")
+            .def_readwrite("name",&WorldData::name , "机器人名字")
+            .def_readwrite("robotId",&WorldData::robotId , "机器人id")
+            .def_readwrite("x",&WorldData::x , "位置x")
+            .def_readwrite("y",&WorldData::y , "位置y")
+            .def_readwrite("theta",&WorldData::theta , "角度")
+            .def_readwrite("vx",&WorldData::vx , "速度x")
+            .def_readwrite("vy",&WorldData::vy , "速度y")
+            .def_readwrite("vtheta",&WorldData::vtheta , "角速度")
+            .def_readwrite("laserData",&WorldData::laserData , "激光雷达数据");
+        m.def("Start",&Start);
+        m.def("pycall",&pycall);
+    }
 }
 
 

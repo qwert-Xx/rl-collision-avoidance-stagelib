@@ -8,16 +8,18 @@ namespace StgCPPToPy{
     std::condition_variable cv;
     bool ready = true;
     std::vector<WorldNode*> worlds; //世界列表
+    std::thread* mainThread; //主线程
+
+    void Start(uint8_t num_world){
+        mainThread =  new std::thread(StgCPPToPy::Init,num_world);
+    }
 
     int Init(uint8_t num_world){
         std::cout << "Start,World!" << std::endl;
-        std::cout << "World Number :" << num_world << std::endl;
-        int argc = 0;
-        char** argv = NULL;
-
-        
-        Stg::Init(&argc, &argv);
-
+        std::cout << "World Number :" << static_cast<int>(num_world) << std::endl;
+        int* argc = new int(0);        
+        Stg::Init(argc, NULL);
+        std::cout << "Init Success!" << std::endl;
         //初始化world,并添加到worlds列表中
 
         if(num_world == 1){
@@ -42,7 +44,7 @@ namespace StgCPPToPy{
 
         //添加各种功能 #TODO
         
-        for (int i = 0; i < worlds.size(); i++){
+        for (std::size_t i = 0; i < worlds.size(); i++){
             WorldNode* world = worlds[i];
             //添加机器人
             
@@ -54,9 +56,11 @@ namespace StgCPPToPy{
 
 
 
-        //启动
+        //启动一个线程来启动
+        // mainThread = new std::thread(Stg::World::Run);
         Stg::World::Run();
-        std::cout << "End, World!" << std::endl;
+        
+        std::cout << "End, Init!" << std::endl;
         return 0;
 
 
@@ -87,7 +91,7 @@ namespace StgCPPToPy{
     std::deque<std::vector<Stg::meters_t>> Robot::GetLaserData(void){
         Stg::ModelRanger* ranger = this->ranger;
         Stg::ModelRanger::Sensor sensor = ranger->GetSensors()[0];
-        Stg::radians_t fov  = sensor.fov;
+        // Stg::radians_t fov  = sensor.fov;
         std::vector<Stg::meters_t> ranges = sensor.ranges;
         while(this->rangesData.size() < 3){ //当历史数据不够时直接使用当前数据填充
             this->rangesData.push_back(ranges);
@@ -114,7 +118,6 @@ namespace StgCPPToPy{
     }
 
     int callback(Stg::World *world, void* user){//世界更新回调函数
-        static bool worldUpdatedone = false;
         WorldNode* node = (WorldNode*)user;
         // std::cout << "Callback from world:" << static_cast<int>(node->GetId()) << std::endl;
         // std::cout << "Time:" << world->SimTimeNow() << std::endl;
@@ -152,7 +155,7 @@ namespace StgCPPToPy{
         //在这里进行处理
         std::vector<WorldData> worldsData;
         //遍历每个世界
-        for (int i = 0; i < worlds.size(); i++){
+        for (std::size_t i = 0; i < worlds.size(); i++){
             WorldNode* world = worlds[i];
             WorldData singalWorldData;
             RobotCmd cmd = robotCmds[i];
@@ -165,7 +168,7 @@ namespace StgCPPToPy{
             //遍历每个机器人
             
             std::vector<Robot*> robots = world->GetRobots();
-            for (int j = 0; j < robots.size(); j++){
+            for (std::size_t j = 0; j < robots.size(); j++){
                 Robot* robot = robots[j];
                 //处理每个机器人
                 Stg::Pose pose = robot->GetPositionData();
