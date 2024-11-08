@@ -9,27 +9,31 @@ REWARD_COLLISION = -15  #碰撞的惩罚
 REWARD_WW = -0.1  #角速度过大的惩罚系数
 
 class Agent():
-    def __init__(self,goal,num_world = 1) -> None:
+    def __init__(self,goal,agent_num = 24,num_world = 1) -> None:
         if num_world != 1:
             raise ValueError("暂未实现多于1个世界")
         stgCPPToPy.Start(num_world)
-        self.goal = goal #目标点,这是一个二维列表[robots][x,y]
+        self.agent_num = agent_num
+        self.goal = goal + [[0,0] for i in range(self.getRealRobotNumber() - len(goal))]#目标点,这是一个二维列表[robots][x,y]
+
+        
         self.last_distance = None
 
     def sendCmd(self,cmd):#发送命令，即发送命令，返回执行的结果
-        return stgCPPToPy.pycall(cmd)
+        return stgCPPToPy.pycall(cmd)[0]
     def getRobotNumber(self):
-        #暂未实现 TODO
+        return self.agent_num
+    def getRealRobotNumber(self):
         return 24
     def reset(self):
         Cmds = []
         cmd = stgCPPToPy.RobotCmd()
         worldId = 0
-        robotId = list(range(self.getRobotNumber()))
-        vx = [0.0 for i in range(self.getRobotNumber())]
-        vy = [0.0 for i in range(self.getRobotNumber())]
-        vtheta = [0.0 for i in range(self.getRobotNumber())]
-        reset = [True for i in range(self.getRobotNumber())]
+        robotId = list(range(self.getRealRobotNumber()))
+        vx = [0.0 for i in range(self.getRealRobotNumber())]
+        vy = [0.0 for i in range(self.getRealRobotNumber())]
+        vtheta = [0.0 for i in range(self.getRealRobotNumber())]
+        reset = [True for i in range(self.getRealRobotNumber())]
         cmd.id = worldId
         cmd.robotId = robotId
         cmd.vx = vx
@@ -37,21 +41,30 @@ class Agent():
         cmd.vtheta = vtheta
         cmd.reset = reset
         Cmds.append(cmd)
-        worldData =  self.sendCmd(Cmds)[0]
         self.last_distance = None
+        worldData =  self.sendCmd(Cmds)
+        state = self.calculateStateOneWorld(worldData)
+        state["distance"] = state["distance"][:self.getRobotNumber()]
+        state["angle"] = state["angle"][:self.getRobotNumber()]
+        state["laser_data"] = state["laser_data"][:self.getRobotNumber()]
+        state["line_speed"] = state["line_speed"][:self.getRobotNumber()]
+        state["angle_speed"] = state["angle_speed"][:self.getRobotNumber()]
+        state["stalled"] = state["stalled"][:self.getRobotNumber()]
+
+        return state
+        
 
 
     def step(self ,action):
-        #暂未实现 TODO
 
-        vx = action["line_speed"]
-        vtheta = action["angle_speed"]
+        vx = action["line_speed"] + [0 for i in range(self.getRealRobotNumber() - len(action["line_speed"])) ] 
+        vtheta = action["angle_speed"] + [0 for i in range(self.getRealRobotNumber() - len(action["line_speed"])) ] 
         cmds = []
         cmd = stgCPPToPy.RobotCmd()
         worldId = 0
-        robotId = list(range(self.getRobotNumber()))
-        vy = [0.0 for i in range(self.getRobotNumber())]
-        reset = [False for i in range(self.getRobotNumber())]
+        robotId = list(range(self.getRealRobotNumber()))
+        vy = [0.0 for i in range(self.getRealRobotNumber())]
+        reset = [False for i in range(self.getRealRobotNumber())]
         cmd.id = worldId
         cmd.robotId = robotId
         cmd.vx = vx
@@ -60,10 +73,20 @@ class Agent():
         cmd.reset = reset
         cmds.append(cmd)
         
-        worldData = self.sendCmd(cmds)[0]
+        worldData = self.sendCmd(cmds)
 
         state = self.calculateStateOneWorld(worldData)
         reward,done = self.calculateReward(state)
+
+        state["distance"] = state["distance"][:self.getRobotNumber()]
+        state["angle"] = state["angle"][:self.getRobotNumber()]
+        state["laser_data"] = state["laser_data"][:self.getRobotNumber()]
+        state["line_speed"] = state["line_speed"][:self.getRobotNumber()]
+        state["angle_speed"] = state["angle_speed"][:self.getRobotNumber()]
+        state["stalled"] = state["stalled"][:self.getRobotNumber()]
+
+        reward = reward[:self.getRobotNumber()]
+        done = done[:self.getRobotNumber()]
 
         return state,reward,done
         # return worldData
@@ -77,7 +100,7 @@ class Agent():
         line_speed = []
         angle_speed = []
         stalled = []
-        if len(worldData.robotId) != self.getRobotNumber():
+        if len(worldData.robotId) != self.getRealRobotNumber():
             raise ValueError("机器人数量不一致")
 
         #计算状态
@@ -85,7 +108,7 @@ class Agent():
         for i in range(len(worldData.robotId)):
             
             x1,y1 = self.goal[i][0] - worldData.x[i] , self.goal[i][1] - worldData.y[i]
-            x2,y2 = math.cos(worldData.theta[i] + math.pi) , math.sin(worldData.theta[i] + math.pi) #因为stage中朝向-x轴是0度，所以这里要加上pi
+            x2,y2 = math.cos(worldData.theta[i]) , math.sin(worldData.theta[i]) 
             
             distance.append((x1**2 + y1**2)**0.5)#距离
             
@@ -119,11 +142,11 @@ class Agent():
         if self.last_distance is None:  # 第一次调用
                 self.last_distance = distance
 
-        if len(distance) != self.getRobotNumber():
+        if len(distance) != self.getRealRobotNumber():
             raise ValueError("机器人数量不一致")
 
 
-        for i in range(self.getRobotNumber()):
+        for i in range(self.getRealRobotNumber()):
             rew = 0
             d = False
             reward_global = 0
