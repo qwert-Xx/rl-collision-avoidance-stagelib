@@ -128,6 +128,7 @@ namespace StgCPPToPy{
         Stg::ModelPosition* position = this->position;
         position->SetPose(this->initialPose);
         this->rangesData.clear();
+        this->lastPose = this->initialPose;
         return;
     }
 
