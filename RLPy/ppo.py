@@ -6,9 +6,9 @@ import torch.nn as nn
 import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class PPO:
-    def __init__(self,lr = 5e-5 , gamma = 0.99 , clip = 0.1):
-        num_points = 12
-        radius = 4
+    def __init__(self,lr = 5e-5 , gamma = 0.99 , clip = 0.1 , lam = 0.95):
+        num_points = 24
+        radius = 5
         angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
         points = [[float(radius * np.cos(angle)), float(radius * np.sin(angle))] for angle in angles]
         # points = np.random.uniform(-4, 4, (num_points, 2)).tolist()
@@ -23,7 +23,8 @@ class PPO:
         self.critic_optim = torch.optim.Adam(self.critic.parameters(), lr=lr)
         self.gamma = gamma 
         self.clip = clip
-        self.time_step_max_per_epoch = 1_50 #每局最多跑多少步
+        self.lam = lam 
+        self.time_step_max_per_epoch = 200 #每局最多跑多少步
         self.epoch_per_batch = 3 #每个batch跑多少局
         self.n_updates_per_iteration = 20 #每次学习的迭代次数
         self.save_freq = 5 #保存模型的频率
@@ -34,15 +35,27 @@ class PPO:
             self.actor.load_state_dict(torch.load('./ppo_actor.pth'))
             self.critic.load_state_dict(torch.load('./ppo_critic.pth'))
             print("加载模型成功")
+        else:
+            print("加载模型失败")
+            #生成一个dataout.csv空文件
+            with open("dataout.csv","w") as f:
+                f.write("")
     def run(self):
         t = 0
         batch_state = [] #[第几局][第几个机器人][第几步]
         batch_action = []
         batch_log_prob = []
-        batch_rtgs = []
+        # batch_rtgs = []
+        batch_vals = []
+        batch_A_k = []
+        batch_rews = []
 
 
         for epoch in range(self.epoch_per_batch): #进行多少局
+            
+            #每局随机生成位置和目标点
+            self.agent.randomSetInitPosition()
+            self.agent.randomSetGoal()
 
             robotDons = torch.tensor( [False] * self.agent.getRobotNumber() ) #机器人是否结束
             ep_state = {"distance":[[]  for _ in range(self.agent.getRobotNumber())] ,"angle":[[]  for _ in range(self.agent.getRobotNumber())] ,"laser_data":[[]  for _ in range(self.agent.getRobotNumber()) ] ,"line_speed":[[]  for _ in range(self.agent.getRobotNumber()) ] ,"angle_speed":[[]  for _ in range(self.agent.getRobotNumber())]} #[第几个机器人][第几步]
@@ -50,8 +63,10 @@ class PPO:
             ep_log_probs = [[] for _ in range(self.agent.getRobotNumber())] #[第几个机器人][第几步]
             ep_rews = [[] for _ in range(self.agent.getRobotNumber())] #[第几个机器人][第几步]
             ep_dones = [[] for _ in range(self.agent.getRobotNumber())] #[第几个机器人][第几步]
-            ep_rtgs = [[] for _ in range(self.agent.getRobotNumber())] #[第几个机器人][第几步]
+            # ep_rtgs = [[] for _ in range(self.agent.getRobotNumber())] #[第几个机器人][第几步]
+            ep_vals = [[] for _ in range(self.agent.getRobotNumber())] #[第几个机器人][第几步]
             ep_ts = [None  for _ in range(self.agent.getRobotNumber())] #[第几个机器人] 一个机器人的时间步数
+            ep_A_k = None
             ep_t = 0
             state = self.agent.reset()
             successNum = 0 #成功的机器人数量
@@ -70,13 +85,17 @@ class PPO:
                 angle_speed = torch.tensor(state["angle_speed"],dtype=torch.float).to(device).unsqueeze(1)
                 distance = torch.tensor(state["distance"],dtype=torch.float).to(device).unsqueeze(1)
                 angle = torch.tensor(state["angle"],dtype=torch.float).to(device).unsqueeze(1)
-
+                
+                #计算action
                 action_mean, action_logstd = self.actor(laser_data = laser_data, line_speed = line_speed, angle_speed = angle_speed, distance = distance, angle = angle)
                 std = action_logstd.exp()
                 normal = torch.distributions.MultivariateNormal(action_mean, torch.diag(std))
                 action = normal.sample()
                 action = torch.stack([torch.clamp(action[:,0], 0, 1), torch.clamp(action[:,1], -1, 1)] , dim = 1).to(device)
                 logprob = normal.log_prob(action)
+                #计算value
+                value = self.critic(laser_data = laser_data, line_speed = line_speed, angle_speed = angle_speed, distance = distance, angle = angle)
+
 
                 for i in range(robotDons.size()[0]):
                     if robotDons[i]: #如果机器人已经结束了
@@ -94,6 +113,7 @@ class PPO:
                     ep_log_probs[i].append(logprob[i])
                     ep_rews[i].append(reward[i])
                     ep_dones[i].append(done[i])
+                    ep_vals[i].append(value[i])
 
                 for i in range(len(ep_ts)): #更新时间步数
                     if robotDons[i]: #如果机器人结束
@@ -122,18 +142,24 @@ class PPO:
                     ep_log_probs[i] = ep_log_probs[i][:ep_ts[i]]
                     ep_rews[i] = ep_rews[i][:ep_ts[i]]
                     ep_dones[i] = ep_dones[i][:ep_ts[i]]
+                    ep_vals[i] = ep_vals[i][:ep_ts[i]]
                 else : #如果没有结束
                     ep_ts[i] = ep_t + 1
 
 
 
-            #计算rtgs
-            for i in range(len(ep_ts)): #对每一个机器人进行计算
-                discounted_reward = 0
-                for rew in reversed(ep_rews[i]): #倒序
-                    discounted_reward = rew + discounted_reward * self.gamma
-                    ep_rtgs[i].insert(0,discounted_reward)
+            # #计算rtgs
+            # for i in range(len(ep_ts)): #对每一个机器人进行计算
+            #     discounted_reward = 0
+            #     for rew in reversed(ep_rews[i]): #倒序
+            #         discounted_reward = rew + discounted_reward * self.gamma
+            #         ep_rtgs[i].insert(0,discounted_reward)
             
+            #通过GAE计算优势函数
+            #TODO
+            ep_A_k = self.calculate_gae(ep_rews, ep_vals, ep_dones)
+
+
             #将数据展平添加到batch中,从[第几个机器人][第几步]展平到[第几步]
             #首先将数据展平
 
@@ -146,7 +172,9 @@ class PPO:
                 ep_state["angle_speed"][i] = torch.tensor(ep_state["angle_speed"][i],dtype=torch.float).to(device)
                 ep_acts[i] = torch.stack(ep_acts[i]).to(device)
                 ep_log_probs[i] = torch.stack(ep_log_probs[i]).to(device)
-                ep_rtgs[i] = torch.tensor(ep_rtgs[i],dtype=torch.float).to(device)
+                ep_rews[i] = torch.tensor(ep_rews[i],dtype=torch.float).to(device)
+                ep_vals[i] = torch.stack(ep_vals[i]).to(device)
+                # ep_rtgs[i] = torch.tensor(ep_rtgs[i],dtype=torch.float).to(device)
             
             #展平
             ep_state["distance"] = torch.cat(ep_state["distance"],dim=0)
@@ -156,12 +184,19 @@ class PPO:
             ep_state["angle_speed"] = torch.cat(ep_state["angle_speed"],dim=0)
             ep_acts = torch.cat(ep_acts,dim=0)
             ep_log_probs = torch.cat(ep_log_probs,dim=0)
-            ep_rtgs = torch.cat(ep_rtgs,dim=0)
+            ep_rews = torch.cat(ep_rews,dim=0)
+            # ep_A_k = torch.cat(ep_A_k,dim=0)
+            # ep_rtgs = torch.cat(ep_rtgs,dim=0)
+            ep_vals = torch.cat(ep_vals,dim=0)
 
+            #添加到batch中
             batch_state.append(ep_state)
             batch_action.append(ep_acts)
             batch_log_prob.append(ep_log_probs)
-            batch_rtgs.append(ep_rtgs)
+            batch_vals.append(ep_vals)
+            batch_A_k.append(ep_A_k)
+            batch_rews.append(ep_rews)
+            # batch_rtgs.append(ep_rtgs)
         #所有局跑完
         #最后将数据展平
         state = {
@@ -191,15 +226,22 @@ class PPO:
 
         batch_action = torch.cat(batch_action,dim=0)
         batch_log_prob = torch.cat(batch_log_prob,dim=0)
-        batch_rtgs = torch.cat(batch_rtgs,dim=0)
+        batch_vals = torch.cat(batch_vals,dim=0)
+        batch_A_k = torch.cat(batch_A_k,dim=0)
+        batch_rews = torch.cat(batch_rews,dim=0)
+        # batch_rtgs = torch.cat(batch_rtgs,dim=0)
 
         
         torch.cuda.empty_cache()
-        return batch_state,batch_action,batch_log_prob,batch_rtgs
+        return batch_state,batch_action,batch_log_prob,batch_A_k,batch_rews
                 
-    def learn(self,batch_state,batch_action,batch_log_prob,batch_rtgs):
+    def learn(self,batch_state,batch_action,batch_log_prob,batch_A_k):
         V,_ = self.evaluate(batch_state,batch_action) #旧策略的价值函数
-        A_k = batch_rtgs - V.detach()
+        A_k = batch_A_k
+
+        batch_rtgs = A_k + V.detach() 
+
+        # A_k = batch_rtgs - V.detach()
         A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
         for _ in range(self.n_updates_per_iteration):
             V, curr_log_probs = self.evaluate(batch_state, batch_action) #新策略的价值函数
@@ -241,20 +283,44 @@ class PPO:
         logprob = normal.log_prob(action)
 
         V = self.critic(laser_data = laser_data, line_speed = line_speed, angle_speed = angle_speed, distance = distance, angle = angle)
-
+        V = V.squeeze()
         return V,logprob
 
     def start(self):
         while(True):
-            batch_state,batch_action,batch_log_prob,batch_rtgs = self.run()
-            print("平均奖励:",batch_rtgs.mean())
-            print("速度概率:",self.actor.logstd)
-            self.learn(batch_state,batch_action,batch_log_prob,batch_rtgs)
+            batch_state,batch_action,batch_log_prob,batch_A_k,batch_rews = self.run()
+            print("平均奖励:",batch_rews.mean())
+            print("速度概率:",self.actor.logstd.tolist())
+            #将数据记录到dataout.csv中
+            with open("dataout.csv","a") as f:
+                #包括平均奖励,速度概率
+                f.write("{},{}\n".format(batch_rews.mean(),self.actor.logstd.tolist()))
+                
+
+            self.learn(batch_state,batch_action,batch_log_prob,batch_A_k)
             del batch_state
             del batch_action
             del batch_log_prob
-            del batch_rtgs
-        
+            del batch_A_k
+    def calculate_gae(self, rewards, values, dones):
+        batch_advantages = []
+        for ep_rews, ep_vals, ep_dones in zip(rewards, values, dones):
+            advantages = []
+            last_advantage = 0
+
+            for t in reversed(range(len(ep_rews))):
+                if t + 1 < len(ep_rews):
+                    delta = ep_rews[t] + self.gamma * ep_vals[t+1] * (1 - (ep_dones[t+1] * 1)) - ep_vals[t]
+                else:
+                    delta = ep_rews[t] - ep_vals[t]
+
+                advantage = delta + self.gamma * self.lam * (1 - (ep_dones[t] * 1)) * last_advantage
+                last_advantage = advantage
+                advantages.insert(0, advantage)
+
+            batch_advantages.extend(advantages)
+
+        return torch.tensor(batch_advantages, dtype=torch.float).to(device) 
 
             
 

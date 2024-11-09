@@ -1,5 +1,6 @@
 import stgCPPToPy
 import math
+import random
 
 REWARD_ARRIVE = 15  #到达目标点时的奖励
 REWARD_WG = 2.5  #向目标点靠近的奖励系数
@@ -176,3 +177,33 @@ class Agent():
 
         self.last_distance = distance
         return reward,done
+    def randomSetInitPosition(self,radius = 10,distance = 2):
+        self.init_positions = []
+        for _ in range(self.getRealRobotNumber()):
+            while True:
+                x = random.uniform(-radius, radius)
+                y = random.uniform(-radius, radius)
+                if all(math.hypot(x - ix, y - iy) > distance for ix, iy in self.init_positions):
+                    self.init_positions.append([x, y])
+                    break
+        robotPositionDatas = []
+        robotPositionData = stgCPPToPy.RobotPosition()
+        robotPositionData.id = 0
+        robotPositionData.robotId = list(range(self.getRealRobotNumber()))
+        robotPositionData.x = [x for x,y in self.init_positions]
+        robotPositionData.y = [y for x,y in self.init_positions]
+        robotPositionData.theta = [random.uniform(-math.pi, math.pi) for _ in range(self.getRealRobotNumber())]
+        robotPositionDatas.append(robotPositionData)
+        stgCPPToPy.SetRobotInitPosition(robotPositionDatas)
+        
+    def randomSetGoal(self,radius = 10 ,distance = 2):
+        #生成随机目标点，每个目标点之间的距离大于distance,范围为-radius到radius
+        self.goal = []
+        for _ in range(self.getRealRobotNumber()):
+            while True:
+                x = random.uniform(-radius, radius)
+                y = random.uniform(-radius, radius)
+                if all(math.hypot(x - gx, y - gy) > distance for gx, gy in self.goal):
+                    self.goal.append([x, y])
+                    break
+            
