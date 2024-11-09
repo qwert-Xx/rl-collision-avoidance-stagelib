@@ -254,5 +254,53 @@ namespace StgCPPToPy{
         return worldsData;
         
     }
+
+    std::vector<RobotPosition> GetRobotInitPosition(void){
+        std::vector<RobotPosition> robotInitPosition;
+        for (std::size_t i = 0; i < worlds.size(); i++){
+            WorldNode* world = worlds[i];
+            std::vector<Robot*> robots = world->GetRobots();
+            RobotPosition position;
+            position.id = world->GetId();
+            for (std::size_t j = 0; j < robots.size(); j++){
+                Robot* robot = robots[j];
+                Stg::Pose pose = robot->GetInitialPose();
+                position.robotId.push_back(robot->GetId());
+                position.x.push_back(pose.x);
+                position.y.push_back(pose.y);
+                position.theta.push_back(pose.a);
+            }
+            robotInitPosition.push_back(position);
+        }
+        return robotInitPosition;
+    }
+
+    void SetRobotInitPosition(std::vector<RobotPosition> robotInitPosition){
+        for (std::size_t i = 0; i < worlds.size(); i++){
+            WorldNode* world = worlds[i];
+            RobotPosition position = robotInitPosition[i];
+            if(position.id != world->GetId()){
+                std::cout << "Error: World id not match!" << std::endl;
+                //抛出异常
+                throw "Error: World id not match!";
+            }
+            std::vector<Robot*> robots = world->GetRobots();
+            for (std::size_t j = 0; j < robots.size(); j++){
+                Robot* robot = robots[j];
+                if(position.robotId[j] != robot->GetId()){
+                    std::cout << "Error: Robot id not match!" << std::endl;
+                    //抛出异常
+                    throw "Error: Robot id not match!";
+                }
+                Stg::Pose pose;
+                pose.x = position.x[j];
+                pose.y = position.y[j];
+                pose.z = 0;
+                pose.a = position.theta[j];
+                robot->SetInitialPose(pose);
+            }
+        }
+
+    }
 }
 

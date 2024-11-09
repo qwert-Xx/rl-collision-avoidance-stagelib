@@ -52,6 +52,12 @@ namespace StgCPPToPy {
             bool GetIsStalled(void){
                 return this->position->Stalled();
             }
+            Stg::Pose GetInitialPose(void){
+                return this->initialPose;
+            }
+            void SetInitialPose(Stg::Pose pose){
+                this->initialPose = pose;
+            }
         private:
             Stg::World* world;
             Stg::ModelPosition* position;
@@ -126,9 +132,20 @@ namespace StgCPPToPy {
         std::vector<bool> reset;//是否重置位置
     };
 
+    struct RobotPosition{//一个世界的所有机器人位置
+        uint8_t id;
+        std::vector<uint8_t> robotId;//机器人id
+        std::vector<double> x;//位置x
+        std::vector<double> y;//位置y
+        std::vector<double> theta;//角度
+    };
+
     extern std::vector<WorldNode*> worlds; //世界列表
     int callback(Stg::World *world, void* user);
     std::vector<WorldData> pycall(std::vector<RobotCmd>);
+
+    std::vector<RobotPosition> GetRobotInitPosition(void);
+    void SetRobotInitPosition(std::vector<RobotPosition>);
 
     PYBIND11_MODULE(stgCPPToPy,m){
         py::class_<RobotCmd>(m,"RobotCmd")
@@ -152,9 +169,17 @@ namespace StgCPPToPy {
             .def_readwrite("vtheta",&WorldData::vtheta , "角速度")
             .def_readwrite("laserData",&WorldData::laserData , "激光雷达数据")
             .def_readwrite("isStalled",&WorldData::isStalled , "是否被卡住");
-            
+        py::class_<RobotPosition>(m,"RobotPosition")
+            .def(py::init<>())
+            .def_readwrite("id",&RobotPosition::id , "世界id")
+            .def_readwrite("robotId",&RobotPosition::robotId , "机器人id")
+            .def_readwrite("x",&RobotPosition::x , "位置x")
+            .def_readwrite("y",&RobotPosition::y , "位置y")
+            .def_readwrite("theta",&RobotPosition::theta , "角度");
         m.def("Start",&Start);
         m.def("pycall",&pycall);
+        m.def("GetRobotInitPosition",&GetRobotInitPosition);
+        m.def("SetRobotInitPosition",&SetRobotInitPosition);
     }
 }
 
