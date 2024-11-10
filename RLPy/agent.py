@@ -8,7 +8,20 @@ REWARD_WG = 2.5  #向目标点靠近的奖励系数
 REWARD_COLLISION = -15  #碰撞的惩罚
 
 REWARD_WW = -0.1  #角速度过大的惩罚系数
-
+class WorldDataForPython():
+    def __init__(self) -> None:
+        self.id = 0
+        self.name = ""
+        self.robotId = []
+        self.x = []
+        self.y = []
+        self.theta = []
+        self.vx = []
+        self.vy = []
+        self.vtheta = []
+        self.laserData = []
+        self.isStalled = []
+        pass
 class Agent():
     def __init__(self,goal,agent_num = 24,num_world = 1) -> None:
         if num_world != 1:
@@ -21,7 +34,22 @@ class Agent():
         self.last_distance = None
 
     def sendCmd(self,cmd):#发送命令，即发送命令，返回执行的结果
-        return stgCPPToPy.pycall(cmd)[0]
+        worldData = stgCPPToPy.pycall(cmd)[0]
+        #将返回的值转换成python原生类型
+        worldDataPy = WorldDataForPython()
+        worldDataPy.id = worldData.id
+        worldDataPy.name = worldData.name.copy()
+        worldDataPy.robotId = worldData.robotId.copy()
+        worldDataPy.x = worldData.x.copy()
+        worldDataPy.y = worldData.y.copy()
+        worldDataPy.theta = worldData.theta.copy()
+        worldDataPy.vx = worldData.vx.copy()
+        worldDataPy.vy = worldData.vy.copy()
+        worldDataPy.vtheta = worldData.vtheta.copy()
+        worldDataPy.laserData = worldData.laserData.copy()
+        worldDataPy.isStalled = worldData.isStalled.copy()
+
+        return worldDataPy
     def getRobotNumber(self):
         return self.agent_num
     def getRealRobotNumber(self):
