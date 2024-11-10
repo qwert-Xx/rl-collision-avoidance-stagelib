@@ -4,6 +4,7 @@ import torch
 import os
 import torch.nn as nn
 import numpy as np
+import time
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class PPO:
     def __init__(self,lr = 5e-5 , gamma = 0.99 , clip = 0.1 , lam = 0.95):
@@ -294,7 +295,12 @@ class PPO:
             #将数据记录到dataout.csv中
             with open("dataout.csv","a") as f:
                 #包括平均奖励,速度概率
-                f.write("{},{}\n".format(batch_rews.mean(),self.actor.logstd.tolist()))
+                timestamp = time.strftime("%Y-%m-%d-%H:%M:%S")
+                f.write("{},{},{}\n".format(batch_rews.mean(),self.actor.logstd.tolist(),timestamp))
+                #保存模型，只保存权重，文件名包含时间戳和对应于记录的第几行
+                torch.save(self.actor.state_dict(), './ppo_actor_{}.pth'.format(timestamp))
+                torch.save(self.critic.state_dict(), './ppo_critic_{}.pth'.format(timestamp))
+                
                 
 
             self.learn(batch_state,batch_action,batch_log_prob,batch_A_k)
