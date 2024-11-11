@@ -35,7 +35,19 @@ namespace StgCPPToPy {
                         ranger->Subscribe();
                     }
                 }
-
+                this->lastPose = this->initialPose;
+                this->goal = Stg::Pose(0,0,0,0);
+                std::set<Stg::Model*> models = world->GetAllModels();
+                for (Stg::Model* model : models) {
+                    if(model->GetModelType() == "blinkenlight"){
+                        Stg::ModelBlinkenlight* light = dynamic_cast<Stg::ModelBlinkenlight*>(model);
+                        if(light->TokenStr() == this->position->TokenStr()+"_goal"){
+                            this->lightGoal = light;
+                            this->lightGoal->SetColor( this->position->GetColor());
+                        }
+                        
+                    }
+                }
             }
             Stg::Pose GetPositionData(void);
             Stg::Velocity GetSpeedData(void);
@@ -58,6 +70,12 @@ namespace StgCPPToPy {
             void SetInitialPose(Stg::Pose pose){
                 this->initialPose = pose;
             }
+            void SetGoal(Stg::Pose pose){
+                this->goal = pose;
+            }
+            Stg::Pose GetGoal(void){
+                return this->goal;
+            }
         private:
             Stg::World* world;
             Stg::ModelPosition* position;
@@ -66,6 +84,8 @@ namespace StgCPPToPy {
             std::deque<std::vector<Stg::meters_t>> rangesData; //历史的激光雷达数据
             uint8_t id;
             Stg::Pose lastPose;
+            Stg::Pose goal;
+            Stg::ModelBlinkenlight* lightGoal;
     };
 
     class WorldNode{
@@ -146,7 +166,7 @@ namespace StgCPPToPy {
 
     std::vector<RobotPosition> GetRobotInitPosition(void);
     void SetRobotInitPosition(std::vector<RobotPosition>);
-
+    void SetRobotGoalPosition(std::vector<RobotPosition>);
     PYBIND11_MODULE(stgCPPToPy,m){
         py::class_<RobotCmd>(m,"RobotCmd")
             .def(py::init<>())
@@ -180,6 +200,7 @@ namespace StgCPPToPy {
         m.def("pycall",&pycall);
         m.def("GetRobotInitPosition",&GetRobotInitPosition);
         m.def("SetRobotInitPosition",&SetRobotInitPosition);
+        m.def("SetRobotGoalPosition",&SetRobotGoalPosition);
     }
 }
 

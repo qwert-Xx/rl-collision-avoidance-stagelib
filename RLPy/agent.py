@@ -55,6 +55,18 @@ class Agent():
     def getRealRobotNumber(self):
         return 24
     def reset(self):
+        #设置目标点
+        goalPositions = []
+        goalPosition = stgCPPToPy.RobotPosition()
+        goalPosition.id = 0
+        goalPosition.robotId = list(range(self.getRealRobotNumber()))
+        goalPosition.x = [x for x,y in self.goal]
+        goalPosition.y = [y for x,y in self.goal]
+        goalPosition.theta = [0 for _ in range(self.getRealRobotNumber())]
+        goalPositions.append(goalPosition)
+        stgCPPToPy.SetRobotGoalPosition(goalPositions)
+
+        #设置机器人初始动作
         Cmds = []
         cmd = stgCPPToPy.RobotCmd()
         worldId = 0
