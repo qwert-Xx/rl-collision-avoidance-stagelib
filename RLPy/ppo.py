@@ -7,7 +7,7 @@ import numpy as np
 import time
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class PPO:
-    def __init__(self,lr = 5e-5 , gamma = 0.99 , clip = 0.1 , lam = 0.95):
+    def __init__(self,lr = 5e-5 , gamma = 0.99 , clip = 0.1 , lam = 0.95,gui = True):
         num_points = 24
         radius = 5
         angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
@@ -17,7 +17,7 @@ class PPO:
         print("目标点",goal)
 
         # goal = [ [0,0] ] * 24 #目标点
-        self.agent = agent.Agent(goal,agent_num=num_points)
+        self.agent = agent.Agent(goal,agent_num=num_points,gui=gui)
         self.actor = net.ActorNet().to(device)
         self.critic = net.CriticNet().to(device)
         self.actor_optim = torch.optim.Adam(self.actor.parameters(), lr=lr)
@@ -41,7 +41,7 @@ class PPO:
             #生成一个dataout.csv空文件
             with open("dataout.csv","w") as f:
                 f.write("")
-    def run(self):
+    def run(self,randomInit = True , randomGoal = True):
         t = 0
         batch_state = [] #[第几局][第几个机器人][第几步]
         batch_action = []
@@ -55,8 +55,10 @@ class PPO:
         for epoch in range(self.epoch_per_batch): #进行多少局
             
             #每局随机生成位置和目标点
-            self.agent.randomSetInitPosition(radius=16,distance=5)
-            self.agent.randomSetGoal(radius=16,distance=5)
+            if randomInit:
+                self.agent.randomSetInitPosition(radius=16,distance=5)
+            if randomGoal:
+                self.agent.randomSetGoal(radius=16,distance=5)
 
             robotDons = torch.tensor( [False] * self.agent.getRobotNumber() ) #机器人是否结束
             ep_state = {"distance":[[]  for _ in range(self.agent.getRobotNumber())] ,"angle":[[]  for _ in range(self.agent.getRobotNumber())] ,"laser_data":[[]  for _ in range(self.agent.getRobotNumber()) ] ,"line_speed":[[]  for _ in range(self.agent.getRobotNumber()) ] ,"angle_speed":[[]  for _ in range(self.agent.getRobotNumber())]} #[第几个机器人][第几步]
@@ -147,17 +149,7 @@ class PPO:
                 else : #如果没有结束
                     ep_ts[i] = ep_t + 1
 
-
-
-            # #计算rtgs
-            # for i in range(len(ep_ts)): #对每一个机器人进行计算
-            #     discounted_reward = 0
-            #     for rew in reversed(ep_rews[i]): #倒序
-            #         discounted_reward = rew + discounted_reward * self.gamma
-            #         ep_rtgs[i].insert(0,discounted_reward)
-            
             #通过GAE计算优势函数
-            #TODO
             ep_A_k = self.calculate_gae(ep_rews, ep_vals, ep_dones)
 
 
@@ -175,7 +167,6 @@ class PPO:
                 ep_log_probs[i] = torch.stack(ep_log_probs[i]).to(device)
                 ep_rews[i] = torch.tensor(ep_rews[i],dtype=torch.float).to(device)
                 ep_vals[i] = torch.stack(ep_vals[i]).to(device)
-                # ep_rtgs[i] = torch.tensor(ep_rtgs[i],dtype=torch.float).to(device)
             
             #展平
             ep_state["distance"] = torch.cat(ep_state["distance"],dim=0)
@@ -187,7 +178,6 @@ class PPO:
             ep_log_probs = torch.cat(ep_log_probs,dim=0)
             ep_rews = torch.cat(ep_rews,dim=0)
             # ep_A_k = torch.cat(ep_A_k,dim=0)
-            # ep_rtgs = torch.cat(ep_rtgs,dim=0)
             ep_vals = torch.cat(ep_vals,dim=0)
 
             #添加到batch中
@@ -197,7 +187,6 @@ class PPO:
             batch_vals.append(ep_vals)
             batch_A_k.append(ep_A_k)
             batch_rews.append(ep_rews)
-            # batch_rtgs.append(ep_rtgs)
         #所有局跑完
         #最后将数据展平
         state = {
@@ -287,10 +276,10 @@ class PPO:
         V = V.squeeze()
         return V,logprob
 
-    def start(self):
+    def start_learn(self,learn_num = 1000,save_freq = 50):
         num = 0
-        while(True):
-            batch_state,batch_action,batch_log_prob,batch_A_k,batch_rews = self.run()
+        for _ in range(learn_num):
+            batch_state,batch_action,batch_log_prob,batch_A_k,batch_rews = self.run(randomGoal=True , randomInit=True)
             print("平均奖励:",batch_rews.mean())
             print("速度概率:",self.actor.logstd.tolist())
             #将数据记录到dataout.csv中
@@ -301,7 +290,7 @@ class PPO:
                 #包括平均奖励,速度概率
                 f.write("{},{},{}\n".format(batch_rews.mean(),self.actor.logstd.tolist(),timestamp))
                 #每一百次记录一次
-            if num % 100 == 0:
+            if num % save_freq == 0:
             #保存模型，只保存权重，文件名包含时间戳和对应于记录的第几行
                 torch.save(self.actor.state_dict(), './ppo_actor_{}.pth'.format(timestamp))
                 torch.save(self.critic.state_dict(), './ppo_critic_{}.pth'.format(timestamp))
@@ -313,6 +302,11 @@ class PPO:
             del batch_action
             del batch_log_prob
             del batch_A_k
+    
+    def start_test(self):
+        while True:
+            self.run(randomGoal=True , randomInit=True)
+
     def calculate_gae(self, rewards, values, dones):
         batch_advantages = []
         for ep_rews, ep_vals, ep_dones in zip(rewards, values, dones):

@@ -14,15 +14,15 @@ namespace StgCPPToPy{
     std::vector<WorldNode*> worlds; //世界列表
     std::thread* mainThread; //主线程
 
-    void Start(uint8_t num_world){
-        mainThread =  new std::thread(StgCPPToPy::Init,num_world);
+    void Start(uint8_t num_world,bool gui){
+        mainThread =  new std::thread(StgCPPToPy::Init,num_world,gui);
         //等待线程沉睡，即初始化完毕
         std::unique_lock<std::mutex> lck(mtx);
         cv.wait(lck, []{return !ready;});
         lck.unlock();
     }
 
-    int Init(uint8_t num_world){
+    int Init(uint8_t num_world,bool gui){
         std::cout << "Start,World!" << std::endl;
         std::cout << "World Number :" << static_cast<int>(num_world) << std::endl;
         int* argc = new int(0);        
@@ -30,7 +30,7 @@ namespace StgCPPToPy{
         std::cout << "Init Success!" << std::endl;
         //初始化world,并添加到worlds列表中
 
-        if(num_world == 1){
+        if(num_world == 1 && gui){
             Stg::World* world = new Stg::WorldGui(600,400,"Test Stage");
             world->Load(stageFileStr);
             world->ShowClock(false);

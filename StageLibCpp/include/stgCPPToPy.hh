@@ -15,8 +15,8 @@ namespace StgCPPToPy {
     extern std::thread* mainThread;
 
     const std::string stageFileStr = "stage1.world";
-    void Start(uint8_t num_world);//在这个函数中开启新线程调用Init
-    int Init(uint8_t num_world);
+    void Start(uint8_t num_world,bool gui);//在这个函数中开启新线程调用Init
+    int Init(uint8_t num_world,bool gui);
 
     class Robot{
         public:

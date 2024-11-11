@@ -23,10 +23,10 @@ class WorldDataForPython():
         self.isStalled = []
         pass
 class Agent():
-    def __init__(self,goal,agent_num = 24,num_world = 1) -> None:
+    def __init__(self,goal,agent_num = 24,num_world = 1,gui = True) -> None:
         if num_world != 1:
             raise ValueError("暂未实现多于1个世界")
-        stgCPPToPy.Start(num_world)
+        stgCPPToPy.Start(num_world,gui)
         self.agent_num = agent_num
         self.goal = goal + [[0,0] for i in range(self.getRealRobotNumber() - len(goal))]#目标点,这是一个二维列表[robots][x,y]
 
