@@ -25,7 +25,7 @@ class PPO:
         self.gamma = gamma 
         self.clip = clip
         self.lam = lam 
-        self.time_step_max_per_epoch = 200 #每局最多跑多少步
+        self.time_step_max_per_epoch = 600 #每局最多跑多少步
         self.epoch_per_batch = 3 #每个batch跑多少局
         self.n_updates_per_iteration = 20 #每次学习的迭代次数
         self.save_freq = 5 #保存模型的频率
@@ -55,8 +55,8 @@ class PPO:
         for epoch in range(self.epoch_per_batch): #进行多少局
             
             #每局随机生成位置和目标点
-            self.agent.randomSetInitPosition()
-            self.agent.randomSetGoal()
+            self.agent.randomSetInitPosition(radius=16,distance=5)
+            self.agent.randomSetGoal(radius=16,distance=5)
 
             robotDons = torch.tensor( [False] * self.agent.getRobotNumber() ) #机器人是否结束
             ep_state = {"distance":[[]  for _ in range(self.agent.getRobotNumber())] ,"angle":[[]  for _ in range(self.agent.getRobotNumber())] ,"laser_data":[[]  for _ in range(self.agent.getRobotNumber()) ] ,"line_speed":[[]  for _ in range(self.agent.getRobotNumber()) ] ,"angle_speed":[[]  for _ in range(self.agent.getRobotNumber())]} #[第几个机器人][第几步]
@@ -288,19 +288,24 @@ class PPO:
         return V,logprob
 
     def start(self):
+        num = 0
         while(True):
             batch_state,batch_action,batch_log_prob,batch_A_k,batch_rews = self.run()
             print("平均奖励:",batch_rews.mean())
             print("速度概率:",self.actor.logstd.tolist())
             #将数据记录到dataout.csv中
+            
+            num += 1
+            timestamp = time.strftime("%Y-%m-%d-%H:%M:%S")
             with open("dataout.csv","a") as f:
                 #包括平均奖励,速度概率
-                timestamp = time.strftime("%Y-%m-%d-%H:%M:%S")
                 f.write("{},{},{}\n".format(batch_rews.mean(),self.actor.logstd.tolist(),timestamp))
-                #保存模型，只保存权重，文件名包含时间戳和对应于记录的第几行
+                #每一百次记录一次
+            if num % 100 == 0:
+            #保存模型，只保存权重，文件名包含时间戳和对应于记录的第几行
                 torch.save(self.actor.state_dict(), './ppo_actor_{}.pth'.format(timestamp))
                 torch.save(self.critic.state_dict(), './ppo_critic_{}.pth'.format(timestamp))
-                
+            
                 
 
             self.learn(batch_state,batch_action,batch_log_prob,batch_A_k)
